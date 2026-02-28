@@ -287,63 +287,149 @@ const SVG_DATA_URI = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNv
    DECISION TREE
    ========================================================= */
 const TREE = {
-  start:{id:'start',question:'¿Estado hemodinámico del paciente?',context:'Valoración primaria ATLS — tras cinturón pélvico, TXA 1 g IV y resucitación inicial',severity:'neutral',
+  /* ── FASE 0: SOSPECHA ─────────────────────────── */
+  start:{id:'start',action:true,title:'Sospecha Fractura Pélvica (Alta Energía)',icon:'🚑',
+    detail:'Medidas iniciales inmediatas en prehospitalaria / sala de reanimación:',
+    infoNote:'Cinturón pélvico · TXA 1 g IV (<3 h postrauma) · Hipotensión permisiva (TAS 80-90; si TCE: ≥110) · Reversión anticoagulación si procede.',
+    timeline:'0 min',next:'eval'},
+
+  /* ── FASE 1: EVALUACIÓN PRIMARIA ──────────────── */
+  eval:{id:'eval',action:true,title:'Evaluación Primaria',icon:'🔬',
+    detail:'ABCDE + eFAST + Rx Pelvis AP + Analítica (hemograma, coagulación, lactato, gasometría) + ROTEM/TEG',
+    infoNote:'2 vías IV gruesas · RABT score → activar PTM si ≥2. Sangre en meato / hematoma perineal → NO sondar → valoración urogenital.',
+    next:'urogenital'},
+
+  /* ── FASE 1b: VALORACIÓN UROGENITAL ───────────── */
+  urogenital:{id:'urogenital',question:'¿Signos de lesión urogenital?',
+    context:'Sangre en meato uretral, hematoma perineal, sangrado vaginal. ¡NO sondar si sospecha!',severity:'warn',
     options:[
-      {label:'Estable',icon:'💚',desc:'PAS >90 mmHg · FC <100 lpm · Respondedor sostenido',next:'stable_tac'},
-      {label:'Inestable',icon:'🔴',desc:'PAS <90 mmHg · FC >100 lpm · Shock hipovolémico',next:'unstable_response'}
+      {label:'Sí — Sangrado uretral',icon:'🚫',desc:'NO sondar → Uretrografía → UROLOGÍA (talla vesical)',next:'urogenital_uro'},
+      {label:'Sí — Sangrado vaginal',icon:'⚠️',desc:'GINECOLOGÍA: exploración + taponamiento + sutura',next:'urogenital_gine'},
+      {label:'No — Sin signos',icon:'💚',desc:'Continuar valoración hemodinámica',next:'response'}
     ]},
-  stable_tac:{id:'stable_tac',action:true,title:'BODY-TAC con contraste IV',icon:'🔬',
-    detail:'TAC helicoidal de cuerpo completo con contraste intravenoso. Permite clasificar la lesión según WSES 2017 y detectar extravasación arterial activa.',next:'wses_stable'},
-  wses_stable:{id:'wses_stable',question:'Clasificación WSES según TAC:',context:'World Society of Emergency Surgery 2017 — Combina hemodinámica + anatomía en TAC',severity:'neutral',
+  urogenital_uro:{id:'urogenital_uro',action:true,title:'Lesión Uretral',icon:'🚫',danger:true,
+    detail:'NO colocar sonda vesical. Solicitar uretrografía retrógrada. Avisar a UROLOGÍA para talla vesical suprapúbica.',
+    dangerNote:'El sondaje a ciegas puede convertir una rotura parcial en completa.',next:'response'},
+  urogenital_gine:{id:'urogenital_gine',action:true,title:'Lesión Vaginal / Ginecológica',icon:'⚠️',
+    detail:'Avisar a GINECOLOGÍA. Exploración bajo anestesia, taponamiento hemostático y sutura si procede. Alta sospecha de fractura abierta.',
+    next:'response'},
+
+  /* ── FASE 2: RESPUESTA A RESUCITACIÓN ─────────── */
+  response:{id:'response',question:'¿Respuesta sostenida (≥15 min) a resucitación inicial?',
+    context:'Cristaloides + ≤2U CH → ¿TAS ≥90 mantenida ≥15 minutos?',severity:'neutral',
     options:[
-      {label:'WSES I — Leve',icon:'🟢',desc:'APC <10 mm · LC <5 mm · Ramo púbico unilateral',next:'r_wses1'},
-      {label:'WSES II — Moderado',icon:'🟠',desc:'APC ≥10 mm · LC ≥5 mm · Bilat. · Sacro desplazado',next:'r_wses2'},
-      {label:'WSES III — Grave',icon:'🔴',desc:'Estable + extravasación arterial activa en TAC',next:'r_wses3'}
+      {label:'SÍ — Estable',icon:'💚',desc:'TAS ≥90 mantenida ≥15 min → WSES I-III',next:'efast_stable'},
+      {label:'NO — Inestable',icon:'🔴',desc:'No mantiene TAS ≥90 ó respondedor transitorio → WSES IV',next:'wses4_actions'}
     ]},
-  unstable_response:{id:'unstable_response',question:'Respuesta a resucitación inicial:',context:'2L cristaloides + hemoderivados. Activar PTM si RABT ≥2.',severity:'warn',
+
+  /* ═══════════ VÍA ESTABLE (WSES I-III) ═══════════ */
+
+  /* ── eFAST en estable ─────────────────────────── */
+  efast_stable:{id:'efast_stable',question:'¿eFAST positivo?',
+    context:'Líquido libre intraabdominal en paciente estable.',severity:'neutral',
     options:[
-      {label:'Respondedor sostenido',icon:'💚',desc:'Mejora hemodinámica mantenida → completar estudio',next:'responder_tac'},
-      {label:'Respondedor transitorio',icon:'🟠',desc:'Mejora inicial pero recae → asumir WSES IV',next:'wses4_extremis'},
-      {label:'No respondedor',icon:'🔴',desc:'Sin mejora hemodinámica → asumir WSES IV',next:'wses4_extremis'}
+      {label:'SÍ — eFAST +',icon:'🟠',desc:'Líquido libre → valorar lesión abdominal asociada',next:'abdom_stable'},
+      {label:'NO — eFAST −',icon:'💚',desc:'Sin líquido libre → continuar con TAC',next:'tac_stable'}
     ]},
-  responder_tac:{id:'responder_tac',action:true,title:'BODY-TAC con contraste IV',icon:'🔬',
-    detail:'El paciente respondió a resucitación — completar estudio de imagen para clasificación WSES.',next:'wses_resp'},
-  wses_resp:{id:'wses_resp',question:'Clasificación WSES en TAC:',severity:'neutral',
+  abdom_stable:{id:'abdom_stable',question:'¿Tipo de lesión abdominal?',
+    context:'Lesión abdominal asociada en paciente estable. El TAC definirá la lesión.',severity:'warn',
     options:[
-      {label:'WSES II',icon:'🟠',desc:'Lesión mecánica significativa sin extravasación',next:'r_wses2'},
-      {label:'WSES III',icon:'🔴',desc:'Estable + extravasación arterial',next:'r_wses3'},
-      {label:'WSES IV',icon:'🟣',desc:'Inestable con lesión significativa',next:'wses4_extremis'}
+      {label:'Órgano sólido (hígado, bazo)',icon:'🟠',desc:'NOM (manejo no operatorio) si estable → TAC para estadificar',next:'tac_stable'},
+      {label:'Sospecha víscera hueca',icon:'🔴',desc:'Peritonismo, aire libre → Laparotomía',next:'lap_stable'}
     ]},
-  wses4_extremis:{id:'wses4_extremis',question:'¿Paciente in extremis?',
-    context:'PAS <60 mmHg · PCR en curso · Índice de shock (FC/PAS) >1.4',severity:'danger',
-    warn:'EAST PMG 2025: recomendación condicional EN CONTRA del REBOA rutinario en trauma pélvico (OR 2.15 mortalidad). Solo indicado in extremis como puente al PPP.',
+  lap_stable:{id:'lap_stable',action:true,title:'Laparotomía (paciente estable)',icon:'🔪',
+    detail:'Cirugía General: laparotomía para reparación de víscera hueca. Si el paciente se desestabiliza durante la cirugía → reclasificar como WSES IV.',
+    infoNote:'Tras control abdominal, continuar con TAC para clasificación pélvica si no se había realizado.',next:'tac_stable'},
+
+  /* ── TAC en estable ───────────────────────────── */
+  tac_stable:{id:'tac_stable',action:true,title:'BODY-TAC con Contraste IV',icon:'📡',
+    detail:'TAC helicoidal de cuerpo completo. Fase arterial obligatoria. Reconstrucciones 3D pelvis.',
+    infoNote:'Permite clasificar la lesión según WSES 2017 y detectar extravasación arterial activa (blush).',next:'extrav'},
+
+  /* ── ¿Extravasación arterial? ─────────────────── */
+  extrav:{id:'extrav',question:'¿Extravasación arterial activa en TAC?',
+    context:'Blush de contraste en fase arterial = sangrado arterial activo.',severity:'neutral',
+    options:[
+      {label:'SÍ — Extravasación (blush)',icon:'🔴',desc:'Cualquier patrón + blush → WSES III',next:'r_wses3'},
+      {label:'NO — Sin extravasación',icon:'💚',desc:'Sin sangrado arterial activo → valorar mecánica',next:'mech'}
+    ]},
+
+  /* ── ¿Inestabilidad mecánica? ─────────────────── */
+  mech:{id:'mech',question:'¿Inestabilidad mecánica de la pelvis?',
+    context:'APC ≥10 mm, LC ≥5 mm, bilateral, sacro desplazado, cizallamiento vertical.',severity:'neutral',
+    options:[
+      {label:'NO — Estable mecánicamente',icon:'🟢',desc:'LC I, APC I, sin desplazamiento → WSES I',next:'r_wses1'},
+      {label:'SÍ — Inestable mecánicamente',icon:'🟠',desc:'APC II-III, LC II-III, VS → WSES II',next:'r_wses2'}
+    ]},
+
+  /* ═══════════ VÍA INESTABLE (WSES IV) ═══════════ */
+
+  /* ── Acciones simultáneas ─────────────────────── */
+  wses4_actions:{id:'wses4_actions',action:true,title:'WSES IV — Acciones Simultáneas',icon:'⚡',danger:true,
+    detail:'Respondedor transitorio = INESTABLE. TAS <90 ó no sostenida tras cristaloides + ≥2U CH.',
+    infoNote:'⟐ SIMULTÁNEAMENTE: 1) PTM 1:1:1 (ratio PFC:CH:Plaquetas) 2) Reevaluar cinturón pélvico 3) eFAST',
+    timeline:'≤45 min',next:'extremis'},
+
+  /* ── ¿In extremis? ────────────────────────────── */
+  extremis:{id:'extremis',question:'¿Paciente in extremis?',
+    context:'PAS <60 mmHg · PCR en curso o inminente · Índice de shock (FC/PAS) >1.4',severity:'danger',
+    warn:'EAST PMG 2025: recomendación condicional EN CONTRA del REBOA rutinario (OR 2.15 mortalidad). Solo indicado in extremis como puente al PPP.',
     options:[
       {label:'Sí — In extremis',icon:'🚨',desc:'PAS <60 · PCR · IS >1.4 → REBOA puente',next:'reboa'},
-      {label:'No — WSES IV',icon:'🟣',desc:'Inestable pero no in extremis → PPP directo',next:'ppp'}
+      {label:'No — Inestable sin extremis',icon:'🟣',desc:'WSES IV sin criterios de extremis → eFAST',next:'efast_unstable'}
     ]},
+
+  /* ── REBOA ────────────────────────────────────── */
   reboa:{id:'reboa',action:true,title:'REBOA Zona III',icon:'🎈',danger:true,
-    detail:'Inflado infrarenal (Zona III). Máximo 60-90 minutos. Puente temporal hasta PPP. Deflado progresivo tras packing.',
-    dangerNote:'Uso EXCLUSIVO in extremis. EAST PMG 2025: OR 2.15 mortalidad. Zheng 2024: OR 2.824. No sustituye al PPP.',next:'ppp'},
-  ppp:{id:'ppp',action:true,title:'Packing Preperitoneal (PPP)',icon:'🩹',
-    detail:'Técnica de elección. Abordaje Pfannenstiel infraumbilical. 3 compresas/lado en espacio preperitoneal. Aborda sangrado venoso y óseo (80-90% del total).',
-    infoNote:'COT o Cirugía General. Tiempo puerta-PPP objetivo: <60 min. Zhang 2024: 60 vs 131 min (AE), RR mortalidad 0.41.',next:'post_ppp'},
-  post_ppp:{id:'post_ppp',question:'¿Persiste sangrado arterial tras PPP?',context:'Evaluar respuesta hemodinámica post-packing. Persistencia de inestabilidad sugiere componente arterial.',severity:'warn',
+    detail:'Inflado infrarenal (Zona III). Acceso femoral 7Fr. Máximo 60-90 min. Puente temporal — NO retrasa cirugía.',
+    dangerNote:'Uso EXCLUSIVO in extremis. EAST PMG 2025: OR 2.15 mortalidad. Zheng 2024: OR 2.824. Deflado progresivo post-PPP.',next:'efast_unstable'},
+
+  /* ── eFAST en inestable ───────────────────────── */
+  efast_unstable:{id:'efast_unstable',question:'¿eFAST positivo?',
+    context:'Líquido libre intraperitoneal en paciente INESTABLE.',severity:'danger',
     options:[
-      {label:'Sí — Persiste',icon:'🔴',desc:'Sangrado arterial activo → Angioembolización',next:'ae'},
-      {label:'No — Controlado',icon:'💚',desc:'Hemostasia lograda → UCI',next:'r_uci'}
+      {label:'SÍ — eFAST +',icon:'🔴',desc:'Sangrado intraperitoneal → Laparotomía + PPP simultáneo',next:'lap_unstable'},
+      {label:'NO — eFAST −',icon:'🟣',desc:'Sin líquido libre → PPP directo',next:'ppp'}
     ]},
+
+  /* ── Laparotomía (inestable) ──────────────────── */
+  lap_unstable:{id:'lap_unstable',action:true,title:'Laparotomía + PPP (incisiones separadas)',icon:'🔪',danger:true,
+    detail:'Cirugía General: laparotomía de control de daños (packing intraabdominal). COT: PPP por incisión Pfannenstiel separada — mismo acto quirúrgico.',
+    dangerNote:'Incisiones DISTINTAS. Si persiste inestabilidad pélvica tras laparotomía → ampliar PPP (COT) en mismo acto Qx.',
+    timeline:'45-90 min',next:'post_ppp'},
+
+  /* ── PPP ──────────────────────────────────────── */
+  ppp:{id:'ppp',action:true,title:'Packing Preperitoneal (PPP)',icon:'🩹',
+    detail:'COT lidera. Abordaje Pfannenstiel infraumbilical. 3 compresas/lado en espacio preperitoneal. Aborda sangrado venoso y óseo (80-90% del total).',
+    infoNote:'Tiempo puerta-PPP objetivo: <60 min. Zhang 2024: 60 vs 131 min (AE), RR mortalidad hemorrágica 0.41. Secuencia PPP→AE es la más eficaz.',
+    timeline:'45-90 min',next:'post_ppp'},
+
+  /* ── ¿Persiste inestabilidad? ─────────────────── */
+  post_ppp:{id:'post_ppp',question:'¿Persiste inestabilidad tras PPP?',
+    context:'Evaluar: TAS ≥90 sostenida · Lactato ↓ · SI <1 · Hb estable. Persistencia sugiere componente arterial.',severity:'warn',
+    options:[
+      {label:'SÍ — Persiste',icon:'🔴',desc:'Sangrado arterial activo → Angioembolización',next:'ae'},
+      {label:'NO — Controlado',icon:'💚',desc:'Hemostasia lograda → UCI',next:'r_uci'}
+    ]},
+
+  /* ── AE ───────────────────────────────────────── */
   ae:{id:'ae',action:true,title:'Angioembolización (AE)',icon:'🎯',
-    detail:'Arteriografía + embolización selectiva por Radiología Intervencionista. Secuencia PPP→AE es la más eficaz en WSES IV.',
-    infoNote:'Objetivo: <5 horas desde ingreso (Huang 2025). En WSES III estable, la AE puede ser primera línea sin PPP previo.',next:'r_uci'},
-  /* Results */
-  r_wses1:{id:'r_wses1',result:true,title:'WSES I — Conservador',color:'var(--green)',colorDark:'var(--green-dark)',
-    steps:['Ingreso en observación 24-48 h','Analgesia multimodal (evitar AINE si riesgo renal)','Carga según tolerancia progresiva','Tromboprofilaxis: HBPM a las 24 h','Control radiológico a las 6 semanas','Fijación si desplazamiento secundario >10 mm']},
-  r_wses2:{id:'r_wses2',result:true,title:'WSES II — Estabilización',color:'var(--amber)',colorDark:'var(--amber-dark)',
-    steps:['Valorar criterios EAC (Vallier/Burkhart 2025)','Si cumple TODOS → fijación definitiva precoz ≤36 h','Si NO → DCO (fijador externo) → definitiva 5-7 días','Criterios: GCS≥14, lactato<4, BD>-5.5, INR<1.4, Plq>100k, pH>7.25','Tromboprofilaxis según protocolo','Fisioterapia precoz']},
-  r_wses3:{id:'r_wses3',result:true,title:'WSES III — AE + Fijación',color:'var(--red)',colorDark:'var(--red-dark)',
-    steps:['Angioembolización selectiva (primera línea)','UCI/REA 24-48 h post-AE','Estabilización mecánica según patrón fracturario','Valorar criterios EAC para fijación definitiva','Tromboprofilaxis tras 24 h de hemostasia','TAC control si deterioro hemodinámico']},
-  r_uci:{id:'r_uci',result:true,title:'UCI — Reevaluación',color:'var(--blue)',colorDark:'var(--blue-dark)',
-    steps:['Monitorización hemodinámica invasiva (PAM, PVC, lactato seriado)','Retirada de packing en quirófano a 48-72 h','TAC control si deterioro o resangrado','Fijación definitiva cuando cumpla criterios EAC','Tromboprofilaxis: HBPM en cuanto hemostasia estable','Valorar filtro de VCI si contraindicación HBPM']}
+    detail:'Arteriografía + embolización selectiva. Radiología Intervencionista. Secuencia PPP→AE es la más eficaz en WSES IV.',
+    infoNote:'Huang 2025: umbral <5 horas desde ingreso. La mortalidad aumenta significativamente si la AE se retrasa. AE aborda el 10-20% arterial no controlado por PPP.',next:'r_uci'},
+
+  /* ═══════════ RESULTADOS / ENDPOINTS ═══════════ */
+
+  r_wses1:{id:'r_wses1',result:true,title:'WSES I — Manejo Conservador',color:'var(--green)',colorDark:'var(--green-dark)',
+    steps:['Ingreso en observación 24-48 h','Analgesia multimodal (evitar AINE si riesgo renal)','Carga según tolerancia progresiva','Tromboprofilaxis: HBPM a las 24 h','Control radiológico a las 6 semanas','Fijación si desplazamiento secundario >10 mm','Alta precoz si evolución favorable']},
+
+  r_wses2:{id:'r_wses2',result:true,title:'WSES II — Fijación ± DCO',color:'var(--amber)',colorDark:'var(--amber-dark)',
+    steps:['Ingreso UCI / planta monitorizada','Valorar criterios EAC (Vallier/Burkhart 2025)','Si cumple TODOS EAC → fijación definitiva precoz ≤24-72 h','Si NO cumple → DCO (fijador externo) → definitiva 5-7 días','EAC: Lactato <4 · pH >7.25 · sin coagulopatía · PAS >90 · no vasopresores','⚠ Si desestabilización hemodinámica → reclasificar como WSES IV','Tromboprofilaxis según protocolo · Fisioterapia precoz']},
+
+  r_wses3:{id:'r_wses3',result:true,title:'WSES III — AE + Fijación Diferida',color:'var(--red)',colorDark:'var(--red-dark)',
+    steps:['Angioembolización selectiva (primera línea en WSES III)','Monitorización en UCI/REA 24-48 h post-AE','Fijación definitiva diferida según patrón fracturario','Valorar criterios EAC para timing de fijación','TAC control si deterioro hemodinámico','Tromboprofilaxis tras 24 h de hemostasia','⚠ Si desestabilización → reclasificar como WSES IV']},
+
+  r_uci:{id:'r_uci',result:true,title:'UCI — Resucitación + Fijación Definitiva',color:'var(--blue)',colorDark:'var(--blue-dark)',
+    steps:['UCI: resucitación guiada por ROTEM/TEG','Corregir tríada letal: Hipotermia (>35°C) · Acidosis (lactato <2) · Coagulopatía (Fib >1.5)','Retirada de packing en quirófano a 24-48 h','TAC 2.ª mirada cuando estable','FIJACIÓN DEFINITIVA — COT lidera — Early Appropriate Care','ORIF anterior/posterior/combinada según patrón · Objetivo: <24-72 h si EAC','EAC: Lactato <4 · pH >7.25 · sin coagulopatía · PAS >90 · no vasopresores','Retraso >14 días → peores resultados (Vallier 2025)','Tromboprofilaxis: HBPM en cuanto hemostasia estable']}
 };
 
 /* =========================================================
@@ -508,9 +594,7 @@ function Guide(){
   const [cur,setCur]=useState('start');
   const ref=useRef(null);
   const node=TREE[cur];
-  const allSteps=['start','stable_tac','wses_stable','unstable_response','responder_tac','wses_resp','wses4_extremis','reboa','ppp','post_ppp','ae'];
-  const stepIdx=allSteps.indexOf(cur);
-  const totalDots=Math.min(8,hist.length+2);
+  const totalDots=Math.min(10,hist.length+2);
 
   function pick(next){setHist(p=>[...p,cur]);setCur(next);ref.current&&(ref.current.scrollTop=0)}
   function back(){if(!hist.length)return;const h=[...hist];setCur(h.pop());setHist(h)}
@@ -552,6 +636,7 @@ function Guide(){
       React.createElement('div',{className:'guide-card'},
         React.createElement('div',{className:'guide-card-header'}),
         React.createElement('div',{className:'guide-card-body'},
+          node.timeline&&React.createElement('div',{style:{display:'inline-block',background:'var(--navy)',color:'#fff',fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:20,marginBottom:8,letterSpacing:'.5px'}},node.timeline),
           React.createElement('div',{className:node.danger?'danger-banner':'action-banner'},
             React.createElement('h3',null,node.icon,' ',node.title),
             React.createElement('p',null,node.detail)
